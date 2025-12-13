@@ -26,7 +26,7 @@ app.get("/api/config", (req, res) => {
 app.post("/api/test-servo", (req, res) => {
     const { angle } = req.body;
 
-    execFile("python3", ["main.py", angle], (error, stdout, stderr) => {
+    execFile("python", ["main.py", angle], (error, stdout, stderr) => {
         if (error) {
             console.error("Python error: ", stderr);
             return res.status(500).json({ error: "Python script failed" });
