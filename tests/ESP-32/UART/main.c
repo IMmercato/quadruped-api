@@ -2,31 +2,30 @@
 
 #include <HardwareSerial.h>
 
-#define RX_PIN 16
-#define TX_PIN 17
+// Use GPIO 16 & 17 instead of default UART0 pins
+#define RX_PIN 16  // ESP32 GPIO16 will receive from Pi
+#define TX_PIN 17  // ESP32 GPIO17 will transmit to Pi
 #define LED_PIN 2  // Built-in LED
 
-// Create a hardware serial object
-HardwareSerial MySerial(1);  // Use UART1
+HardwareSerial MySerial(2);  // Use UART2
 
 void setup() {
-  // Debug serial (USB)
+  // Debug serial (USB) - THIS STAYS ON UART0
   Serial.begin(115200);
   delay(1000);
   
-  // UART communication with Raspberry Pi
-  // Format: begin(baud, config, rxPin, txPin)
+  // UART communication with Raspberry Pi - NOW USING UART2
   MySerial.begin(115200, SERIAL_8N1, RX_PIN, TX_PIN);
   
   pinMode(LED_PIN, OUTPUT);
   digitalWrite(LED_PIN, LOW);
   
-  Serial.println("=== ESP32 UART Slave Ready ===");
+  Serial.println("=== ESP32 UART Slave Ready (UART2) ===");
   Serial.println("RX: GPIO16, TX: GPIO17");
   Serial.println("Baud: 115200");
   Serial.println("Commands: '1' = ON, '0' = OFF");
   
-  // Success indication (3 quick blinks)
+  // Success indication
   for(int i = 0; i < 3; i++) {
     digitalWrite(LED_PIN, HIGH);
     delay(150);
@@ -35,7 +34,7 @@ void setup() {
   }
   
   // Send ready message to Raspberry Pi
-  MySerial.println("ESP32_READY");
+  MySerial.println("ESP32_READY_UART2");
 }
 
 void loop() {
