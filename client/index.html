@@ -3,8 +3,48 @@
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Quadruped Control</title>
+        <link rel="stylesheet" href="style.css">
     </head>
     <body>
-        <h1>Hello</h1>
+        <header>
+            <div class="container">
+                <strong>Quadruped <span style="color:var(--accent)">Rover</span></strong>
+                <div style="float: right; font-size: 0.8rem;">
+                    <span class="status-dot"></span> RPi 5 Online
+                </div>
+            </div>
+        </header>
+
+        <div class="container">
+            <h1>Control Center</h1>
+            <p>Standalone API Management Interface</p>
+
+            <div class="grid">
+                <a href="/api/tests" class="card">
+                    <h3>Hardware Tests</h3>
+                    <p>Sevo calibration and LED checks.</p>
+                    <span class="badge">/api/tests</span>
+                </a>
+                <a href="/api/live" class="card">
+                    <h3>Live Video</h3>
+                    <p>Real-time video</p>
+                    <span class="badge">/api/live</span>
+                </a>
+                <a href="/api/info" class="card">
+                    <h3>System Info</h3>
+                    <p>Battery and sensors.</p>
+                    <span class="badge">/api/info</span>
+                </a>
+            </div>
+
+            <div class="security">
+                <small style="color: #f59e0b;"> Authentication Required: Use X-API-Key header for all requests.</small>
+            </div>
+        </div>
+
+        <footer>
+            Built with Node.js & Express + WS on Raspberry Pi 5
+        </footer>
     </body>
 </html>
