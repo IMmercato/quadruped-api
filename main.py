@@ -5,7 +5,7 @@ import socket
 import os
 from queue import Queue
 from enum import Enum
-from typing import Dict
+from typing import Dict, Optional, Tuple
 
 PACKET_HEADER = bytes([0xAA, 0x55])
 MAX_PAYLOAD_SIZE = 255
@@ -68,6 +68,42 @@ class QuadrupedController:
             checksum ^= byte
 
         return packet + bytes([checksum])
+    
+    def parse_packet(self, data: bytes) -> Optional[Tuple[int, bytes]]:
+        """
+        Parse received packet and validate checksum
+
+        Returns: (command_id, payload) or None if invalid
+        """
+        if len(data) < 5:   # Minimum packet size
+            return None
+        
+        # Verify header
+        if data[0:2] != PACKET_HEADER:
+            return None
+        
+        command_id = data[2]
+        payload_length = data[3]
+
+        # Check paacket length
+        expected_length = 4 + payload_length + 1    # header(2) + cmd(1) + len(1) + payload + checksum(1)
+        if len(data) < expected_length:
+            return None
+        
+        # Verify checksum
+        received_checksum = data[expected_length - 1]
+        calculated_checksum = 0
+        for byte in data[:expected_length - 1]:
+            calculated_checksum ^= byte
+
+        if received_checksum != calculated_checksum:
+            self.checksum_errors += 1
+            print(f"Checksum error: expected {calculated_checksum:02X}, got {received_checksum:02X}")
+            return None
+        
+        # Extract payload
+        payload = data[4:4 + payload_length]
+        return (command_id, payload)
 
     def connect(self) -> bool:
         """Establish UART connection with Slave"""
