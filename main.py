@@ -1,6 +1,8 @@
 import serial
 import time
 import threading
+import socket
+import os
 from queue import Queue
 from enum import Enum
 from typing import Dict
@@ -254,6 +256,46 @@ class QuadrupedController:
             'response_queue_size': self.response_queue.qsize(),
             'battery_voltage': self.last_battery_voltage
         }
+    
+    # Socket listener
+    def run_ipc_server(controller):
+        """Listens for commands from the Node.js server without closing the UART"""
+        server_address = '/tmp/quadruped_sock'
+
+        # Clean up the socket file
+        if os.path.exists(server_address):
+            os.remove(server_address)
+
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        sock.bind(server_address)
+        sock.listen(1)
+
+        print(f"IPC Server started at {server_address}")
+
+        try:
+            while True:
+                connection, client_address = sock.accept()
+                try:
+                    data = connection.recv(1024).decode('utf-8').strip()
+                    if not data: continue
+
+                    print(f"IPC Received: {data}")
+
+                    # Logic to route commands to your controller
+                    if data == "on":
+                        controller.led_control(True)
+                    elif data == "off":
+                        controller.led_control(False)
+                    elif data == "stop":
+                        controller.emergency_stop()
+
+                    connection.sendall(b"OK")
+                finally:
+                    connection.close()
+        except KeyboardInterrupt:
+            pass
+        finally:
+            os.remove(server_address)
 
 if __name__ == "__main__":
     controller = QuadrupedController('/dev/serial0', 115200)
@@ -262,6 +304,9 @@ if __name__ == "__main__":
         print("Connected successfully!")
         print(f"Initial status: {controller.get_status()}")
 
+        controller.run_ipc_server(controller)
+
+        """
         try:
             # LED Control
             print("\n--- LED Test ---")
@@ -279,5 +324,6 @@ if __name__ == "__main__":
 
         finally:
             controller.disconnect()
+        """
     else:
         print("Failed to connect")

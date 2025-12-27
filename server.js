@@ -2,6 +2,7 @@ import express from "express";
 import dotenv from "dotenv";
 import http from "http";
 import path from "path";
+import net from 'net';
 import { execFile } from "child_process";
 import { WebSocketServer } from "ws";
 import { fileURLToPath } from "url";
@@ -13,6 +14,8 @@ dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
+const SOCKET_PATH = '/tmp/quadruped_sock';
 
 // Generate API keys and save them on .env with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 const VALID_API_KEYS = new Set(process.env.ALLOWED_KEYS ? process.env.ALLOWED_KEYS.split(',') : []);
@@ -91,6 +94,24 @@ function rateLimiter(req, res, next) {
     next();
 }
 
+function sendToPython(command, res) {
+    const client = net.createConnection({ path: SOCKET_PATH });
+
+    client.on('connect', () => {
+        client.write(command);
+    });
+
+    client.on('data', (data) => {
+        res.json({ ok: true, python_response: data.toString() });
+        client.end();
+    });
+
+    client.on('error', (err) => {
+        console.error("IPC Error:", err);
+        res.status(500).json({ error: "Python service not running" });
+    });
+}
+
 const app = express();
 app.use(express.json());
 
@@ -153,23 +174,9 @@ app.post("/api/tests/led", authAPIKey, (req, res) => {
         return res.status(400).json({
             error: "Invalid state. Must provide 'state': 'on' or 'off'"
         });
+    } else {
+        sendToPython(state, res);
     }
-
-    execFile("python", ["main.py", state], (error, stdout, stderr) => {
-        if (error) {
-            console.error("Python error: ", stderr);
-            return res.status(500).json({
-                error: "Python script failed",
-                details: stderr
-            });
-        }
-        res.json({
-            ok: true,
-            state: state,
-            message: `LED turned ${state.toUpperCase()}`,
-            output: stdout.trim()
-        });
-    });
 });
 
 app.get("/api/hello", (req, res) => {
