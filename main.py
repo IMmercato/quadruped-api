@@ -3,9 +3,22 @@ import time
 import threading
 from queue import Queue
 from enum import Enum
+from typing import Dict
 
 PACKET_HEADER = bytes([0xAA, 0x55])
 MAX_PAYLOAD_SIZE = 255
+
+class CommandID(Enum):
+    """Command IDs for communication protocol"""
+    # Basic Commands
+    PING = 0x01
+    LED_CONTROL = 0x02
+
+    # Servo Commands
+    # Sensor Commands
+
+    # Emergency
+    EMERGENCY_STOP = 0xFF
 
 class QuadrupedController:
     def __init__(self, port='/dev/serial0', baud_rate=115200, timeout=0.1):
@@ -25,6 +38,7 @@ class QuadrupedController:
         self.running = False
 
         # State tracking
+        self.last_battery_voltage = 0.0
         self.error_count = 0
 
         #Statistics
@@ -69,7 +83,7 @@ class QuadrupedController:
             self.ser.reset_output_buffer()
 
             # PING
-            ping_packet = self.create_packet(0x01)
+            ping_packet = self.create_packet(CommandID.PING.value)
             self.ser.write(ping_packet)
             self.ser.flush()
 
@@ -127,21 +141,143 @@ class QuadrupedController:
                 print(f"Send thread error: {e}")
                 self.error_count += 1
 
-if __name__ == "__main__":
-    controller = QuadrupedController()
+    def _receive_worker(self):
+        """Thread for receiving responses from Slave"""
+        buffer = bytearray()
 
-    if (controller.__init__):
-        print("Connected successfully!")
+        while self.running:
+            try:
+                if self.ser and self.ser.in_waiting:
+                    # Read available data
+                    data = self.ser.read(self.ser.in_waiting)
+                    buffer.extend(data)
+
+                    # Try to find and parse packets
+                    while len(buffer) >= 5:
+                        # Look for packets header
+                        header_index = buffer.find(PACKET_HEADER)
+
+                        if header_index == -1:
+                            buffer.clear()
+                            break
+
+                        # Remove data before header
+                        if header_index > 0:
+                            buffer = buffer[header_index:]
+
+                        # Check if we have enough data for length field
+                        if len(buffer) < 4:
+                            break
+
+                        payload_length = buffer[3]
+                        packet_length = 4 + payload_length + 1
+
+                        # Wait for complete packet
+                        if len(buffer) < packet_length:
+                            break
+
+                        # Extract and parse packet
+                        packet = bytes(buffer[:packet_length])
+                        result = self.parse_packet(packet)
+
+                        if result:
+                            self.packets_received += 1
+                            self._process_response(result[0], result[1])
+
+                        # Remove processed packet from buffer
+                        buffer = buffer[packet_length:]
+                else:
+                    time.sleep(0.001)
+
+            except Exception as e:
+                print(f"Receive thread error: {e}")
+                self.error_count += 1
+
+    def _process_response(self, command_id: int, payload: bytes):
+        """Process parsed response packet"""
+        try:
+            # Process the payload as you need to
+            if command_id == CommandID.x.value:
+                if len(payload) >= 3:
+                    servo_id = payload[0]
+        
+            # Store response for user retrival
+            self.response_queue.put({
+                'command_id': command_id,
+                'payload': payload,
+                'timestamp': time.time()
+            })
+
+        except Exception as e:
+            print(f"Error processing response: {e}")
+
+    # LED Control - TEST
+    def led_control(self, state: bool) -> bool:
+        """Control LED on/off"""
+        if not self.connected:
+            print("Not connected to Slave")
+            return False
+        
+        payload = bytes([0xFF if state else 0x00])
+        packet = self.create_packet(CommandID.LED_CONTROL.value, payload)
 
         try:
-            # LED ON
-            controller.create_packet(0x01, bytes([0xFF]))
+            self.command_queue.put(packet, timeout=0.5)
+            return True
+        except:
+            print("Command queue full")
+            return False
+
+    def emergency_stop(self) -> bool:
+        """Immediately stop all motors"""
+        if not self.connected:
+            return False
+        
+        packet = self.create_packet(CommandID.EMERGENCY_STOP.value)
+
+        # High priority - send immediately without queue
+        try:
+            self.ser.write(packet)
+            self.ser.flush()
+            return True
+        except:
+            return False
+
+    def get_status(self) -> Dict:
+        """Get overall system status"""
+        return {
+            'connected': self.connected,
+            'error_count': self.error_count,
+            'packets_sent': self.packets_sent,
+            'checksum_errors': self.checksum_errors,
+            'command_queue_size': self.command_queue.qsize(),
+            'response_queue_size': self.response_queue.qsize(),
+            'battery_voltage': self.last_battery_voltage
+        }
+
+if __name__ == "__main__":
+    controller = QuadrupedController('/dev/serial0', 115200)
+
+    if controller.connect():
+        print("Connected successfully!")
+        print(f"Initial status: {controller.get_status()}")
+
+        try:
+            # LED Control
+            print("\n--- LED Test ---")
+            controller.led_control(True)
             time.sleep(1)
+            controller.led_control(False)
+            time.sleep(1)
+
+            # Final status
+            print(f"\nFinal status: {controller.get_status()}")
 
         except KeyboardInterrupt:
             print("\nStopping...")
+            controller.emergency_stop()
 
         finally:
-            controller.diconnect
+            controller.disconnect()
     else:
         print("Failed to connect")
