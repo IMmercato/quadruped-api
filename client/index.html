@@ -5,6 +5,22 @@
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Quadruped Control</title>
         <link rel="stylesheet" href="style.css">
+        <style>
+            .btn-group { display: flex; gap: 10px; margin-top: 10px; }
+            .btn { 
+                flex: 1; padding: 8px; border-radius: 6px; border: none; 
+                cursor: pointer; font-weight: bold; transition: opacity 0.2s;
+            }
+            .btn-on { background: #22c55e; color: white; }
+            .btn-off { background: #ef4444; color: white; }
+            .btn:hover { opacity: 0.8; }
+            .key-input {
+                background: var(--bg); border: 1px solid var(--border);
+                color: var(--text); padding: 8px; border-radius: 4px; width: 100%;
+                margin-top: 10px; box-sizing: border-box;
+            }
+            #api-status { margin-top: 10px; display: block; font-size: 0.85rem; }
+        </style>
     </head>
     <body>
         <header>
@@ -21,9 +37,18 @@
             <p>Standalone API Management Interface</p>
 
             <div class="grid">
+                <div class="card">
+                    <h3>Quick LED Test</h3>
+                    <p>Toggle Arduino Pin 13 via I2C.</p>
+                    <div class="btn-group">
+                        <button class="btn btn-on" onclick="sendLedCommand('on')">ON</button>
+                        <button class="btn btn-off" onclick="sendLedCommand('off')">OFF</button>
+                    </div>
+                </div>
+
                 <a href="/api/tests" class="card">
                     <h3>Hardware Tests</h3>
-                    <p>Sevo calibration and LED checks.</p>
+                    <p>Servo calibration and LED checks.</p>
                     <span class="badge">/api/tests</span>
                 </a>
                 <a href="/api/live" class="card">
@@ -39,12 +64,69 @@
             </div>
 
             <div class="security">
-                <small style="color: #f59e0b;"> Authentication Required: Use X-API-Key header for all requests.</small>
+                <small style="color: #f59e0b;">🔐 API Authentication</small>
+                <input type="password" id="apiKeyInput" class="key-input" placeholder="Paste your API Key here...">
+                <div style="margin-top: 10px;">
+                    <button class="badge" style="cursor:pointer; border:1px solid var(--accent)" onclick="saveApiKey()">Save Key to Browser</button>
+                    <span id="api-status"></span>
+                </div>
             </div>
         </div>
 
         <footer>
             Built with Node.js & Express + WS on Raspberry Pi 5
         </footer>
+
+        <script>
+            // On load, check if a key exists in local storage
+            document.addEventListener('DOMContentLoaded', () => {
+                const savedKey = localStorage.getItem('rover_api_key');
+                if (savedKey) {
+                    document.getElementById('apiKeyInput').value = savedKey;
+                    updateStatus("Key loaded from storage", "#818cf8");
+                }
+            });
+
+            function saveApiKey() {
+                const key = document.getElementById('apiKeyInput').value;
+                localStorage.setItem('rover_api_key', key);
+                updateStatus("Key saved locally!", "#22c55e");
+            }
+
+            function updateStatus(msg, color) {
+                const status = document.getElementById('api-status');
+                status.innerText = msg;
+                status.style.color = color;
+            }
+
+            async function sendLedCommand(state) {
+                const apiKey = localStorage.getItem('rover_api_key');
+                if (!apiKey) {
+                    updateStatus("Error: No API Key saved!", "#ef4444");
+                    return;
+                }
+
+                try {
+                    const response = await fetch('/api/tests/led', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'x-api-key': apiKey // Required by server.js authAPIKey middleware
+                        },
+                        body: JSON.stringify({ state: state })
+                    });
+
+                    const data = await response.json();
+
+                    if (response.ok) {
+                        updateStatus(`Success: LED turned ${state}`, "#22c55e");
+                    } else {
+                        updateStatus(`Error: ${data.message || data.error}`, "#ef4444");
+                    }
+                } catch (err) {
+                    updateStatus("Error: Failed to connect to server", "#ef4444");
+                }
+            }
+        </script>
     </body>
 </html>
